@@ -4,7 +4,7 @@
 terraform {
   required_providers {
     azurerm = {
-      source = "hashicorp/azurerm"
+      source  = "hashicorp/azurerm"
       version = "~> 4.0"
     }
   }
@@ -20,7 +20,7 @@ provider "azurerm" {
 }
 
 # terraform init → download/install provider plugins and initialize the working directory
-
+# Resource Group → Virtual Network → Subnet → Public IP → Network Security Group → NSG rule → Network Interface → attach NSG to NIC → VM
 resource "azurerm_resource_group" "rg" {
   name     = "terraform-vm-rg"
   location = "East US"
@@ -90,6 +90,8 @@ resource "azurerm_network_security_group" "nsg" {
 # If no rules match, the default action is to deny the traffic. Therefore, it's important to assign unique priority 
 # numbers to each rule to ensure they are evaluated in the correct order. In this example, the SSH rule has a priority of 100,
 # which means it will be evaluated before any rules with a higher priority number.
+# Azure does not allow priorities below 100 mainly to reserve space for system/default rules and 
+# to give administrators room to insert rules later without renumbering everything.
 resource "azurerm_network_security_rule" "ssh_rule" {
   name                        = "Allow-SSH"
   priority                    = 100
@@ -102,4 +104,60 @@ resource "azurerm_network_security_rule" "ssh_rule" {
   destination_address_prefix  = "*"
   resource_group_name         = azurerm_resource_group.rg.name
   network_security_group_name = azurerm_network_security_group.nsg.name
+}
+
+# Attach NSG to the NIC to apply the security rules to the VM's network interface. 
+# This association ensures that the NSG rules are enforced for traffic to and from the VM.
+# Traffic rule flow: Internet -> Public IP -> NIC -> NSG rules -> VM
+resource "azurerm_network_interface_security_group_association" "nic_nsg" {
+  network_interface_id      = azurerm_network_interface.nic.id
+  network_security_group_id = azurerm_network_security_group.nsg.id
+}
+
+# The azurerm_linux_virtual_machine resource is used to create a Linux VM in Azure.
+# It includes various configuration options such as the VM size, admin username, authentication method, 
+# and the network interface to attach to the VM.
+# Note: "admin_username = "azureuser" must " must match with "username" in the "admin_ssh_key" block, 
+# because the public key is being installed for that specific Linux user account on the VM.
+# So:
+# admin_username = "azureuser" creates or defines the admin user
+# admin_ssh_key.username = "azureuser" tells Azure which user’s authorized_keys gets that public key
+# If they do not match, you can end up with:
+# one user defined as the admin account
+# the SSH key attached to a different user
+resource "azurerm_linux_virtual_machine" "vm" {
+  name                = "terraform-vm"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  zone                = "3"
+  size                = "Standard_DC1s_v3"
+  admin_username      = "azureuser"
+
+  network_interface_ids = [
+    azurerm_network_interface.nic.id
+  ]
+
+  disable_password_authentication = true
+
+  admin_ssh_key {
+    username   = "azureuser"
+    public_key = file("/home/endie/.ssh/azure/kubernetes.pub")
+  }
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts-gen2"
+    version   = "latest"
+  }
+}
+
+# Output the public IP so we can SSH
+output "public_ip" {
+  value = azurerm_public_ip.pip.ip_address
 }

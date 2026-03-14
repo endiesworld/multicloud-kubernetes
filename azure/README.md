@@ -257,12 +257,15 @@ az vm list-usage --location eastus -o table
 ### Deploy
 
 ```bash
-terraform plan    # preview what will be created
-terraform apply   # create the resources
-terraform destroy # tear everything down when done
+terraform fmt       # auto-format code
+terraform validate  # check syntax/schema
+terraform init      # install providers
+terraform plan      # preview what will be created
+terraform apply     # create the resources
+terraform plan -destroy -out=destroy.tfplan # preview what will be destroyed if we run terraform destroy
+terraform apply destroy.tfplan  # destroy the resources (safe way to avoid accidental deletion)
+terraform destroy   # tear everything down when done
 ```
-
----
 
 ## Terraform Variables
 
