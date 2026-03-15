@@ -1,0 +1,10 @@
+resource_group_name       = "terraform-kubernetes-rg"
+location                  = "East US"
+vnet_name                 = "terraform-kubernetes-vnet"
+vnet_address_space_cidr   = ["10.0.0.0/16"]
+subnet_name               = "terraform-kubernetes-name"
+subnet_address_space_cidr = ["10.0.1.0/24"]
+public_ip_name            = "terraform-kubernetes-public-ip"
+nic_name                  = "terraform-kubernetes-n-interface-card"
+nsg_name                  = "terraform-kubernetes-nsg"
+ssh_source_ip             = "108.35.175.17/32"

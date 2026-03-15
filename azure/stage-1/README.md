@@ -260,13 +260,12 @@ az vm list-usage --location eastus -o table
 terraform fmt       # auto-format code
 terraform validate  # check syntax/schema
 terraform init      # install providers
-terraform plan      # preview what will be created
-terraform apply     # create the resources
+terraform plan  -out=plan.tfplan    # or terraform plan -out=plan.tfplan preview what will be created
+terraform apply plan.tfplan     # or terraform apply tfplan, create the resources
 terraform plan -destroy -out=destroy.tfplan # preview what will be destroyed if we run terraform destroy
 terraform apply destroy.tfplan  # destroy the resources (safe way to avoid accidental deletion)
 terraform destroy   # tear everything down when done
 ```
-
 ## Terraform Variables
 
 Variables let you parameterize your configuration so it can be reused across different environments without changing the code itself.
