@@ -196,45 +196,60 @@ This is different from a `resource` block:
 - a `resource` block tells Terraform to create, update, or delete something
 - a `data` block tells Terraform to look something up and read it
 
-Example:
+**Basic Syntax**:
 
 ```hcl
-data "azurerm_client_config" "current" {}
+data "<PROVIDER_RESOURCE_TYPE>" "<LOCAL_NAME>" {
+  # arguments used to look up the existing object
+}
+```
+***Note***: The arguments in a data source are not defining new infrastructure. They are criteria for finding existing infrastructure.
+**Example:**
+
+```hcl
+data "azurerm_resource_group" "existing_rg" {
+  name = "my-existing-rg"
+}
 ```
 
-This does not create anything in Azure. It reads information about the currently authenticated identity, such as:
-
-- subscription ID
-- tenant ID
-- client ID
-
-Example usage:
-
+***Then you can reference it like this:***
 ```hcl
-output "current_subscription_id" {
-  value = data.azurerm_client_config.current.subscription_id
-}
+data.azurerm_resource_group.existing_rg.location
+data.azurerm_resource_group.existing_rg.id
 ```
 
 ### Common Azure data source use cases
 
 You use data sources when some infrastructure already exists and Terraform should reference it rather than create it again.
-
-Examples:
-
+***Common Cases:***
 - an existing resource group
 - an existing virtual network
 - an existing subnet
 - the current Azure client configuration
 - an existing image or Key Vault
 
-Example:
+***Example:***
+Suppose a resource group already exists in Azure, and you want to create a VNet inside it.
+
+You do not want Terraform to create the resource group again.
+
+You can do this:
 
 ```hcl
-data "azurerm_resource_group" "existing" {
+data "azurerm_resource_group" "rg" {
   name = "shared-network-rg"
 }
+
+resource "azurerm_virtual_network" "vnet" {
+  name                = "dev-vnet"
+  location            = data.azurerm_resource_group.rg.location
+  resource_group_name = data.azurerm_resource_group.rg.name
+  address_space       = ["10.0.0.0/16"]
+}
 ```
+***Note***: For the above example, the resource group `shared-network-rg` must already exist in Azure before you run `terraform apply`. Terraform will read its location and name but will not create it. i.e, 
+- `shared-network-rg` is a resource that exists outside of this Terraform configuration
+- `shared-network-rg` must be readable/accessible by the credentials Terraform is using
 
 That pattern is common in larger organizations where platform teams create shared resources and application teams consume them.
 
