@@ -1,17 +1,15 @@
-# Terraform Outputs, Locals, Data Sources, and Modules on Azure
+# Terraform Outputs, Locals, and Modules on Azure
 
-Stage 3 moves beyond "parameterized Terraform" and into "structured Terraform."
+Stage 3 moves beyond basic variables and starts teaching how Terraform configurations become easier to read, easier to reuse, and easier to consume.
 
-In Stage 2, the main improvement was introducing input variables so the Azure configuration could be reused with different values. That is an important step, but professional Terraform requires more than inputs. You also need:
+This stage is implemented in two parts:
 
-- **outputs** to expose useful results
-- **locals** to reduce repetition and centralize derived values
-- **data sources** to read information that already exists
-- **modules** to package infrastructure into reusable building blocks
+- `a` shows **locals** and **outputs** in a single root module
+- `b` refactors that same infrastructure into a reusable **module** and then exposes module outputs from the root module
 
-This stage is where a Terraform project starts to feel like an actual system rather than a single configuration file.
+That progression matters. Before splitting code into modules, it helps to understand how Terraform values flow inside one configuration. After that, modules become much easier to reason about.
 
-If you have not worked through the earlier Azure stages yet, start with:
+If you have not completed the earlier Azure stages yet, start with:
 
 - [../stage-1/README.md](../stage-1/README.md)
 - [../stage-1/azure-README.md](../stage-1/azure-README.md)
@@ -23,217 +21,186 @@ If you have not worked through the earlier Azure stages yet, start with:
 
 By the end of this stage, you should understand:
 
-- when to use an output and what it exposes
-- when a local value is better than repeating literals or expressions
-- how a data source differs from a managed resource
-- how Terraform modules create reusable interfaces around infrastructure
-- how these four concepts work together in a real Azure codebase
+- how `locals` reduce repetition in Terraform
+- how `output` blocks expose useful infrastructure values
+- what a Terraform data source is and when you would use one
+- how a root module differs from a child module
+- how to call the same module multiple times with different inputs
+- why child-module outputs must be re-exposed at the root if you want `terraform output` to show them
 
-The mental shift here is important:
-
-- **variables** are inputs into your Terraform configuration
-- **locals** are computed values inside your configuration
-- **data sources** read information from outside your configuration
-- **outputs** expose information from your configuration
-- **modules** package all of that into reusable units
+This stage does **not** yet include a concrete Azure data source example in `a` or `b`. The practical implementation focus here is locals, outputs, and modules, while the data source section below is included for conceptual grounding.
 
 ---
 
-## Where Stage 3 Fits in the Learning Path
+## Directory Layout
 
-The progression across the Azure directory is now:
+```text
+azure/stage-3/
+├── README.md
+├── a/
+│   ├── main.tf
+│   ├── variables.tf
+│   ├── outputs.tf
+│   └── terraform.tfvars
+└── b/
+    ├── main.tf
+    ├── outputs.tf
+    └── modules/
+        └── vm-infrastructure/
+            ├── main.tf
+            ├── variables.tf
+            └── outputs.tf
+```
 
-1. Stage 1: Azure fundamentals and the first Terraform configuration
-2. Stage 2: input variables and `terraform.tfvars`
-3. Stage 3: structure, reuse, and information flow in Terraform
+Think of the two subdirectories like this:
 
-That progression mirrors how many engineers learn Terraform in practice:
-
-1. make it work
-2. make it configurable
-3. make it maintainable
+- `a` = learn the concepts in one place
+- `b` = package the same idea into a reusable module
 
 ---
 
-## Outputs
+## Part A: Locals and Outputs in a Single Configuration
 
-An **output** exposes a value from Terraform after the plan is applied.
+The `a` directory keeps everything in one root module.
 
-Outputs are useful when you want to:
+It creates:
 
-- print important infrastructure values in the CLI
-- pass values from one module to another
-- expose resource IDs, IP addresses, names, or connection details
-- make the result of a deployment easier to inspect
+- a resource group
+- a virtual network
+- a subnet
+- a public IP
+- a network security group
+- a network interface
+- a Linux VM
+
+The important Stage 3 addition is not the Azure resource list. It is the introduction of **locals** and **outputs**.
+
+### Locals in `a`
+
+In [main.tf](/home/endie/Projects/Kubernetes/Multicloud-kubernetes/azure/stage-3/a/main.tf#L15), the configuration defines local values such as:
+
+- `resource_prefix`
+- `rg_name`
+- `vnet_name`
+- `subnet_name`
+- `ip_name`
+- `nsg_name`
+- `nic_name`
+- `vm_name`
 
 Example:
 
 ```hcl
+locals {
+  resource_prefix = "${var.environment}-demo"
+  rg_name         = "${local.resource_prefix}-rg"
+  vnet_name       = "${local.resource_prefix}-vnet"
+  subnet_name     = "${local.resource_prefix}-subnet"
+}
+```
+
+This teaches an important Terraform habit:
+
+- accept external inputs with variables
+- derive internal naming and repeated expressions with locals
+
+Instead of writing resource names manually in every resource block, the configuration builds names once and reuses them everywhere.
+
+### Why this is better than hard-coded names
+
+Without locals, your resource blocks fill up with repeated strings. With locals:
+
+- naming becomes consistent
+- changing a naming pattern is easier
+- the resource blocks become easier to read
+- the configuration starts to look like infrastructure logic rather than string repetition
+
+### Outputs in `a`
+
+In [outputs.tf](/home/endie/Projects/Kubernetes/Multicloud-kubernetes/azure/stage-3/a/outputs.tf#L1), the configuration exposes the VM public IP:
+
+```hcl
 output "public_ip" {
-  description = "Public IP address of the VM"
+  description = "The public IP address of the virtual machine."
   value       = azurerm_public_ip.pip.ip_address
 }
 ```
 
-This output says:
-
-- after the resources exist
-- read the `ip_address` attribute from `azurerm_public_ip.pip`
-- expose it as `public_ip`
-
-You can inspect outputs with:
+That output lets you retrieve the public IP after apply:
 
 ```bash
 terraform output
 terraform output public_ip
 ```
 
-### When outputs are useful in Azure
+This is the first place where Stage 3 starts teaching Terraform information flow:
 
-Common Azure examples include:
+- resources create infrastructure
+- outputs expose useful results from that infrastructure
 
-- VM public IP addresses
-- resource group names
-- subnet IDs
-- virtual network IDs
-- network security group IDs
-- managed identity principal IDs
+### Variables still matter in `a`
 
-### Professional guidance for outputs
+The values in [variables.tf](/home/endie/Projects/Kubernetes/Multicloud-kubernetes/azure/stage-3/a/variables.tf) and [terraform.tfvars](/home/endie/Projects/Kubernetes/Multicloud-kubernetes/azure/stage-3/a/terraform.tfvars) still provide the external inputs, such as:
 
-Outputs should expose information that is genuinely useful to a human, another module, or downstream automation. They should not dump every attribute from every resource.
+- `environment`
+- `location`
+- network CIDR ranges
+- VM size
+- SSH key path
 
-Good outputs are:
+So `a` teaches a full chain:
 
-- intentional
-- well named
-- documented
-- stable
+1. variables receive input
+2. locals derive internal names
+3. resources create Azure infrastructure
+4. outputs expose useful values
 
----
-
-## Locals
-
-A **local value** lets you define a named expression inside the configuration.
-
-Locals are useful when you want to:
-
-- avoid repeating the same string or expression in many places
-- compute derived values once and reuse them
-- centralize naming conventions
-- simplify resource blocks
-
-Example:
-
-```hcl
-locals {
-  name_prefix = "terraform-kubernetes"
-  common_tags = {
-    environment = "learning"
-    managed_by  = "terraform"
-    cloud       = "azure"
-  }
-}
-```
-
-You then reference them with:
-
-```hcl
-local.name_prefix
-local.common_tags
-```
-
-### Why locals matter
-
-Suppose you repeat the same naming prefix across your configuration:
-
-```hcl
-name = "terraform-kubernetes-rg"
-name = "terraform-kubernetes-vnet"
-name = "terraform-kubernetes-nsg"
-```
-
-That works, but it creates duplication. A local allows you to derive names more cleanly:
-
-```hcl
-locals {
-  name_prefix = "terraform-kubernetes"
-}
-```
-
-```hcl
-name = "${local.name_prefix}-rg"
-name = "${local.name_prefix}-vnet"
-name = "${local.name_prefix}-nsg"
-```
-
-### Locals vs variables
-
-This distinction matters:
-
-- use a **variable** when the caller should be able to set the value
-- use a **local** when the value is derived or internal to the configuration
-
-Example:
-
-- `location` is a good candidate for a variable
-- a standardized name prefix derived from a project name is often a good candidate for a local
-
-### Professional guidance for locals
-
-Locals are not just for convenience. They are part of interface design.
-
-A good Terraform codebase pushes external decisions to variables and keeps internal composition in locals.
+That is the right foundation before introducing modules.
 
 ---
 
 ## Data Sources
 
-A **data source** reads information from infrastructure that already exists.
+A **data source** reads information about infrastructure that already exists.
 
 This is different from a `resource` block:
 
-- a `resource` block tells Terraform to create, update, or delete something
-- a `data` block tells Terraform to look something up and read it
+- a `resource` block creates, updates, or deletes infrastructure
+- a `data` block looks up infrastructure and reads its attributes
 
-**Basic Syntax**:
-
-```hcl
-data "<PROVIDER_RESOURCE_TYPE>" "<LOCAL_NAME>" {
-  # arguments used to look up the existing object
-}
-```
-***Note***: The arguments in a data source are not defining new infrastructure. They are criteria for finding existing infrastructure.
-**Example:**
+Basic example:
 
 ```hcl
-data "azurerm_resource_group" "existing_rg" {
-  name = "my-existing-rg"
+data "azurerm_resource_group" "existing" {
+  name = "shared-network-rg"
 }
 ```
 
-***Then you can reference it like this:***
+You can then reference that existing object like this:
+
 ```hcl
-data.azurerm_resource_group.existing_rg.location
-data.azurerm_resource_group.existing_rg.id
+data.azurerm_resource_group.existing.name
+data.azurerm_resource_group.existing.location
+data.azurerm_resource_group.existing.id
 ```
 
-### Common Azure data source use cases
+### Why data sources matter
 
-You use data sources when some infrastructure already exists and Terraform should reference it rather than create it again.
-***Common Cases:***
+Real Terraform projects often need to work with infrastructure that is not created by the current configuration.
+
+Common examples include:
+
 - an existing resource group
 - an existing virtual network
 - an existing subnet
-- the current Azure client configuration
-- an existing image or Key Vault
+- the currently authenticated Azure account context
+- a shared Key Vault or image
 
-***Example:***
-Suppose a resource group already exists in Azure, and you want to create a VNet inside it.
+That is where data sources become important. They allow your Terraform code to consume existing Azure information without trying to recreate it.
 
-You do not want Terraform to create the resource group again.
+### Azure example
 
-You can do this:
+Suppose a networking team already created a resource group and you want your Terraform configuration to create resources inside it:
 
 ```hcl
 data "azurerm_resource_group" "rg" {
@@ -247,286 +214,262 @@ resource "azurerm_virtual_network" "vnet" {
   address_space       = ["10.0.0.0/16"]
 }
 ```
-***Note***: For the above example, the resource group `shared-network-rg` must already exist in Azure before you run `terraform apply`. Terraform will read its location and name but will not create it. i.e, 
-- `shared-network-rg` is a resource that exists outside of this Terraform configuration
-- `shared-network-rg` must be readable/accessible by the credentials Terraform is using
 
-That pattern is common in larger organizations where platform teams create shared resources and application teams consume them.
+In that case:
 
-### Why data sources matter professionally
+- Terraform reads the existing resource group
+- Terraform does not create the resource group
+- Terraform uses the existing group's attributes to place new resources correctly
 
-Real infrastructure is often a mix of:
+### Important note for this stage
 
-- resources Terraform manages in the current configuration
-- resources managed elsewhere
-- resources created by another team or module
-
-Data sources let your Terraform code participate in that reality without pretending it owns everything.
+The `a` and `b` examples in this stage do not yet implement a live Azure data source. They are included here for information and for the mental model you will need as your Terraform project becomes more realistic.
 
 ---
 
-## Modules
+## Part B: Turning the VM Stack into a Reusable Module
 
-A **module** is a container for Terraform configuration.
+The `b` directory takes the same basic infrastructure pattern and packages it into a child module:
 
-Every Terraform configuration has a **root module**, which is the directory where you run `terraform plan` and `terraform apply`.
+- [main.tf](/home/endie/Projects/Kubernetes/Multicloud-kubernetes/azure/stage-3/b/modules/vm-infrastructure/main.tf)
+- [variables.tf](/home/endie/Projects/Kubernetes/Multicloud-kubernetes/azure/stage-3/b/modules/vm-infrastructure/variables.tf)
+- [outputs.tf](/home/endie/Projects/Kubernetes/Multicloud-kubernetes/azure/stage-3/b/modules/vm-infrastructure/outputs.tf)
 
-Any module you call from that root module is a **child module**.
+This is the point where Terraform starts looking more like reusable engineering and less like a single folder of resources.
 
-Modules are useful when you want to:
+### Root module vs child module
 
-- reuse the same infrastructure pattern multiple times
-- separate concerns
-- reduce copy-paste
-- define clear inputs and outputs
+In `b`, the directory itself is the **root module**. That is where you run:
 
-### A practical Azure example
+- `terraform init`
+- `terraform plan`
+- `terraform apply`
 
-Your stage-2 configuration already has natural boundaries:
+Inside `b/modules/vm-infrastructure/` is the **child module**.
 
-- networking
-- security
-- compute
+The child module contains the actual Azure resources. The root module calls it.
 
-That can evolve into modules such as:
+### Calling the module
 
-```text
-azure/stage-3/
-├── main.tf
-├── variables.tf
-├── outputs.tf
-├── locals.tf
-├── data.tf
-├── modules/
-│   ├── network/
-│   │   ├── main.tf
-│   │   ├── variables.tf
-│   │   └── outputs.tf
-│   └── linux-vm/
-│       ├── main.tf
-│       ├── variables.tf
-│       └── outputs.tf
-└── README.md
-```
-
-The root module might call a network module like this:
+In [main.tf](/home/endie/Projects/Kubernetes/Multicloud-kubernetes/azure/stage-3/b/main.tf#L15), the root module calls the child module once:
 
 ```hcl
-module "network" {
-  source                    = "./modules/network"
-  resource_group_name       = var.resource_group_name
-  location                  = var.location
-  vnet_name                 = var.vnet_name
-  vnet_address_space_cidr   = var.vnet_address_space_cidr
-  subnet_name               = var.subnet_name
-  subnet_address_space_cidr = var.subnet_address_space_cidr
+module "terraform-vm" {
+  source       = "./modules/vm-infrastructure"
+  project_name = "terraform-vm"
+  environment  = "dev"
+  location     = "East US"
+  ...
 }
 ```
 
-Then a VM module could consume outputs from the network module:
+Then it calls the same module again in [main.tf](/home/endie/Projects/Kubernetes/Multicloud-kubernetes/azure/stage-3/b/main.tf#L33):
 
 ```hcl
-module "linux_vm" {
-  source                    = "./modules/linux-vm"
-  resource_group_name       = var.resource_group_name
-  location                  = var.location
-  nic_name                  = var.nic_name
-  subnet_id                 = module.network.subnet_id
-  public_ip_name            = var.public_ip_name
-  nsg_name                  = var.nsg_name
-  ssh_source_ip             = var.ssh_source_ip
-  vm_name                   = var.vm_name
-  vm_size                   = var.vm_size
-  admin_username            = var.admin_username
-  public_key_path           = var.public_key_path
-  os_disk_storage_account_type = var.os_disk_storage_account_type
-  image_publisher           = var.image_publisher
-  image_offer               = var.image_offer
-  image_sku                 = var.image_sku
-  image_version             = var.image_version
+module "second-terraform-vm" {
+  source       = "./modules/vm-infrastructure"
+  project_name = "second-terraform-vm"
+  environment  = "dev"
+  location     = "East US"
+  ...
 }
 ```
 
-That is where the earlier concepts come together:
+This is one of the most important Terraform ideas:
 
-- variables define module inputs
-- resources create Azure infrastructure
-- outputs expose values to callers
-- locals simplify repeated internal logic
-- data sources let modules consume existing infrastructure when needed
+- one module defines a reusable infrastructure pattern
+- many module blocks can instantiate that pattern with different inputs
 
----
+In this case, changing `project_name` changes the naming prefix, which allows a second independent VM stack to be created.
 
-## Module Design Principles
+### Locals still exist inside the module
 
-A module should not just be a folder full of Terraform. It should have a clear responsibility.
-
-Good module design usually means:
-
-- one module, one main concern
-- explicit inputs
-- explicit outputs
-- minimal hidden assumptions
-- no unnecessary leakage of internal details
-
-For this Azure project, natural module boundaries might be:
-
-- `network`
-- `security`
-- `linux-vm`
-- later, `aks`, `load-balancer`, or `monitoring`
-
-### What not to do
-
-Avoid modules that are:
-
-- too tiny to be useful
-- too large to understand
-- tightly coupled to one caller's naming quirks
-- full of environment-specific literals
-
-The goal is not "use modules everywhere." The goal is "use modules when they create a meaningful reusable interface."
-
----
-
-## How These Concepts Work Together
-
-A mature Terraform flow often looks like this:
-
-1. variables receive external input
-2. locals derive internal values
-3. data sources read existing state from Azure
-4. resources create or modify infrastructure
-5. outputs expose useful results
-6. modules package the entire pattern for reuse
-
-This is the information flow you should start seeing in your head as you read a Terraform codebase.
-
----
-
-## Example Refactor Path from Stage 2
-
-If you were evolving the current Azure VM configuration into Stage 3, a sensible path would be:
-
-1. Move the existing `output "public_ip"` into a dedicated `outputs.tf`
-2. Introduce `locals.tf` for common naming patterns and tags
-3. Introduce `data.tf` for values you want to read instead of hard-code
-4. Split networking and VM creation into child modules
-5. Keep the root module focused on orchestration rather than low-level resource detail
-
-That is a realistic progression from a learning configuration to a reusable infrastructure layout.
-
----
-
-## Azure-Specific Examples You Are Likely to Use
-
-### Output example
-
-```hcl
-output "vm_id" {
-  description = "The resource ID of the Linux VM"
-  value       = azurerm_linux_virtual_machine.vm.id
-}
-```
-
-### Local example
+The child module in [main.tf](/home/endie/Projects/Kubernetes/Multicloud-kubernetes/azure/stage-3/b/modules/vm-infrastructure/main.tf#L2) still uses locals to derive names:
 
 ```hcl
 locals {
-  common_tags = {
-    project     = "multicloud-kubernetes"
-    environment = "learning"
-    provider    = "azure"
-  }
+  az_project_name = var.project_name
+  resource_prefix = "${local.az_project_name}-${var.environment}"
+  rg_name         = "${local.resource_prefix}-rg"
+  vnet_name       = "${local.resource_prefix}-vnet"
+  subnet_name     = "${local.resource_prefix}-subnet"
 }
 ```
 
-### Data source example
+That shows an important design pattern:
+
+- variables define the module interface
+- locals define the module's internal composition
+
+The caller decides the high-level input values. The module decides how to turn those inputs into internal resource names and resource relationships.
+
+### Module outputs
+
+The child module exposes its public IP in [outputs.tf](/home/endie/Projects/Kubernetes/Multicloud-kubernetes/azure/stage-3/b/modules/vm-infrastructure/outputs.tf#L1):
 
 ```hcl
-data "azurerm_client_config" "current" {}
-```
-
-### Module call example
-
-```hcl
-module "network" {
-  source              = "./modules/network"
-  resource_group_name = var.resource_group_name
-  location            = var.location
+output "public_ip" {
+  description = "The public IP address of the virtual machine."
+  value       = azurerm_public_ip.pip.ip_address
 }
 ```
 
-These are not advanced tricks. They are core Terraform patterns you will see in serious production repositories.
+That means each module instance produces a `public_ip` value.
+
+Conceptually, the root module can access them as:
+
+- `module.terraform-vm.public_ip`
+- `module.second-terraform-vm.public_ip`
 
 ---
 
-## Common Beginner Mistakes in Stage 3
+## Why the Root `outputs.tf` in `b` Matters
 
-### Treating outputs like logs
+One of the easiest mistakes when first learning modules is expecting Terraform to print child-module outputs automatically.
 
-Outputs should expose useful interface values, not everything Terraform knows.
+It does not.
 
-### Using locals for user input
+`terraform output` shows only **root module outputs**.
 
-If a value should be configurable by the caller, it belongs in a variable, not in `locals`.
+That is why `b` includes [outputs.tf](/home/endie/Projects/Kubernetes/Multicloud-kubernetes/azure/stage-3/b/outputs.tf#L1):
 
-### Confusing data sources with resources
+```hcl
+output "terraform_vm_public_ip" {
+  description = "The public IP address of the first VM module."
+  value       = module.terraform-vm.public_ip
+}
 
-A data source reads existing Azure information. It does not create infrastructure.
+output "second_terraform_vm_public_ip" {
+  description = "The public IP address of the second VM module."
+  value       = module.second-terraform-vm.public_ip
+}
+```
 
-### Over-modularizing too early
+This file re-exposes child-module outputs at the root level.
 
-Not every three lines of Terraform deserve their own module. Start with clear boundaries and expand only where reuse or readability improves.
+That is why, after a successful apply, these commands work from `azure/stage-3/b`:
 
-### Building modules with weak interfaces
+```bash
+terraform output
+terraform output terraform_vm_public_ip
+terraform output second_terraform_vm_public_ip
+```
 
-If a module has vague variable names, undocumented behavior, or missing outputs, it becomes harder to reuse than plain root-module Terraform.
+This is a critical professional concept:
 
----
-
-## From Beginner to Professional
-
-A beginner learns:
-
-- how to write Terraform blocks
-- how to pass variables
-- how to create resources
-
-A more advanced practitioner learns:
-
-- how information flows through Terraform
-- how to design stable module interfaces
-- how to mix managed resources with existing infrastructure
-- how to make infrastructure code readable by other engineers
-
-That second level is what Stage 3 is about.
+- child modules can produce outputs for their callers
+- root modules decide which of those values should be exposed to operators or downstream tooling
 
 ---
 
-## Suggested End State for This Stage
+## The Main Learning Progression from A to B
 
-By the time you finish implementing Stage 3, your Azure directory should ideally show these characteristics:
+The movement from `a` to `b` is the real lesson of Stage 3.
 
-- resource names and tags are centralized with locals where appropriate
-- important values are exposed with outputs
-- account or platform context is read with data sources when useful
-- reusable infrastructure chunks are moved into modules
-- the root module reads more like orchestration than raw implementation detail
+### In `a`
 
-That is a strong foundation for later work such as:
+You learn how to organize one Terraform configuration with:
 
-- turning the VM into a Kubernetes bootstrap node
-- introducing multiple nodes
-- migrating patterns into reusable multicloud module design
-- eventually comparing Azure, AWS, and GCP implementations
+- variables for external inputs
+- locals for internal naming
+- outputs for useful results
+
+### In `b`
+
+You learn how to package that pattern into a reusable module and instantiate it more than once.
+
+That is how Terraform evolves in real projects:
+
+1. write one working configuration
+2. reduce repetition with locals
+3. expose useful values with outputs
+4. package the pattern into a module
+5. call the module multiple times from a root module
+
+That sequence is much easier to understand than jumping straight into modules on day one.
+
+---
+
+## How to Run Part A
+
+From `azure/stage-3/a`:
+
+```bash
+terraform init
+terraform validate
+terraform plan -out tfplan
+terraform apply tfplan
+```
+
+Then inspect the output:
+
+```bash
+terraform output
+terraform output public_ip
+```
+
+To destroy the infrastructure:
+
+```bash
+terraform plan -destroy -out destroy.tfplan
+terraform apply destroy.tfplan
+```
+
+---
+
+## How to Run Part B
+
+From `azure/stage-3/b`:
+
+```bash
+terraform init
+terraform validate
+terraform plan -out tfplan
+terraform apply tfplan
+```
+
+Then inspect the root outputs:
+
+```bash
+terraform output
+terraform output terraform_vm_public_ip
+terraform output second_terraform_vm_public_ip
+```
+
+To destroy the infrastructure:
+
+```bash
+terraform plan -destroy -out destroy.tfplan
+terraform apply destroy.tfplan
+```
+
+---
+
+## Beginner to Professional Takeaways
+
+At a beginner level, Stage 3 teaches:
+
+- how to use locals instead of repeating strings
+- how to read output values after apply
+- how a module call works
+
+At a more professional level, Stage 3 teaches interface design:
+
+- variables are the module inputs
+- locals are the module's internal wiring
+- outputs are the module's public results
+- the root module is responsible for orchestration and for deciding what to expose
+
+That is the real value of this stage. You are no longer only writing Terraform resources. You are starting to design Terraform structure.
 
 ---
 
 ## Summary
 
-Stage 3 is about Terraform structure.
+Stage 3 is about making Terraform easier to reason about and easier to reuse.
 
-Outputs, locals, data sources, and modules are not isolated features. Together, they define how a Terraform codebase communicates, avoids duplication, reads existing infrastructure, and scales beyond a single file.
+Part `a` shows how locals and outputs improve a single Azure VM configuration.
 
-Once you understand these concepts in Azure, you will be in a much stronger position to build reusable multicloud Terraform patterns rather than provider-specific one-offs.
+Part `b` takes that same pattern and turns it into a reusable module that can be instantiated multiple times, while teaching the important distinction between child-module outputs and root-module outputs.
+
+Once this stage feels natural, you are in a much stronger position to build larger Azure layouts and eventually repeat the same design ideas across AWS and GCP in a true multicloud Terraform project.

@@ -1,20 +1,7 @@
-terraform {
-  required_providers {
-    azurerm = {
-      source  = "hashicorp/azurerm"
-      version = "~> 4.0"
-    }
-  }
-}
-
-provider "azurerm" {
-  features {}
-  subscription_id = "98456b7d-49ec-406e-9c4b-aa98b0232b74"
-}
 
 locals {
-  project-name     = var.project_name
-  resource_prefix = "${local.project-name}-${var.environment}"
+  az_project_name     = var.project_name
+  resource_prefix = "${local.az_project_name}-${var.environment}"
   rg_name         = "${local.resource_prefix}-rg"
   vnet_name       = "${local.resource_prefix}-vnet"
   subnet_name     = "${local.resource_prefix}-subnet"
