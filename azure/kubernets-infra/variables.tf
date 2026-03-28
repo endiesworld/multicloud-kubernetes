@@ -50,20 +50,13 @@ variable "nsg_name" {
   type        = string
 }
 
-variable "admin_ip" {
-  description = "The IP address of the machine you will ssh from"
-  type        = string
-  default     = "108.35.175.17/32"
-}
-
-variable "enable_ssh_rule" {
-  description = "Whether to enable the NSG rule allowing SSH access from the admin IP"
-  type        = bool
-  default     = true
-}
-
 variable "enable_cilium_vxlan" {
   description = "Whether to enable the NSG rule allowing Cilium VXLAN traffic"
   type        = bool
   default     = true
+}
+
+variable "ssh_source_ip" {
+  description = "The public IP address of the administrator's machine for SSH access"
+  type        = string
 }

@@ -1,0 +1,7 @@
+project_name  = "kubernetes-cluster"
+environment   = "dev"
+location      = "East US"
+vnet_name     = "kubernetes-cluster-vnet"
+subnet_name   = "kubernetes-cluster-subnet"
+nsg_name      = "kubernetes-cluster-network-firewall"
+ssh_source_ip = "108.35.175.17/32"
