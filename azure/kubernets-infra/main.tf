@@ -188,7 +188,7 @@ module "contol-plane" {
   rg_name                      = azurerm_resource_group.rg.name
   location                     = azurerm_resource_group.rg.location
   vm_zone                      = "3"
-  vm_size                      = "Standard_DC1s_v3"
+  vm_size                      = "Standard_DC2s_v3"
   admin_username               = "azureuser"
   public_key_path              = "/home/endie/.ssh/azure/kubernetes.pub"
   os_disk_storage_account_type = "Standard_LRS"

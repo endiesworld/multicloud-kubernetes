@@ -197,9 +197,9 @@ Before any code, explain the resources conceptually:
 
 Then map them to the cluster:
 
-- control-plane VM
-- worker-1 VM
-- worker-2 VM
+- control-plane VM (With a minimum of 2 CPUs and 4 GB of RAM)
+- worker-1 VM 
+- worker-2 VM 
 
 ### Part 4. Explain Kubernetes Node Roles
 
