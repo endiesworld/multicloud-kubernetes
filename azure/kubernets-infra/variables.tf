@@ -27,13 +27,13 @@ variable "vnet_name" {
 variable "vnet_address_space_cidr" {
   description = "The address space in CIDR notation for the virtual network."
   type        = list(string)
-  default     = ["10.0.0.0/16"]
+  default     = ["172.16.0.0/16"]
 }
 
 variable "subnet_address_space_cidr" {
   description = "The address space in CIDR notation for the subnet."
   type        = list(string)
-  default     = ["10.0.1.0/24"]
+  default     = ["172.16.1.0/24"]
   validation {
     condition     = length(var.subnet_address_space_cidr) == 1
     error_message = "This shared-foundation stage expects exactly one subnet CIDR."
