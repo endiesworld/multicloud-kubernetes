@@ -170,6 +170,26 @@ resource "aws_vpc_security_group_ingress_rule" "cp_ingress_apiserver_from_worker
   description                  = "Allow workers to reach Kubernetes API server"
 }
 
+# Workers -> Control Plane (NFS Server)
+resource "aws_vpc_security_group_ingress_rule" "cp_ingress_nfs_from_workers" {
+  security_group_id            = aws_security_group.cp_security_group.id
+  referenced_security_group_id = aws_security_group.worker_security_group.id
+  from_port                    = 2049
+  to_port                      = 2049
+  ip_protocol                  = "tcp"
+  description                  = "Allow NFS traffic from workers to control plane"
+}
+
+# Allow Workers to reach RPC Bind (Required for showmount)
+resource "aws_vpc_security_group_ingress_rule" "cp_nfs_rpc" {
+  security_group_id            = aws_security_group.cp_security_group.id
+  referenced_security_group_id = aws_security_group.worker_security_group.id
+  from_port                    = 111
+  to_port                      = 111
+  ip_protocol                  = "tcp" # Add a second rule for "udp" if needed
+  description                  = "RPC Bind for NFS"
+}
+
 # Control plane self -> kubelet on control plane
 resource "aws_vpc_security_group_ingress_rule" "cp_ingress_kubelet_self" {
   security_group_id            = aws_security_group.cp_security_group.id
@@ -453,6 +473,16 @@ resource "aws_vpc_security_group_egress_rule" "worker_egress_icmp_internet" {
   to_port           = -1
   ip_protocol       = "icmp"
   description       = "Allow workers outbound ICMP for diagnostics"
+}
+
+# Workers -> Control Plane (NFS Server)
+resource "aws_vpc_security_group_egress_rule" "worker_egress_nfs_to_cp" {
+  security_group_id            = aws_security_group.worker_security_group.id
+  referenced_security_group_id = aws_security_group.cp_security_group.id
+  from_port                    = 2049
+  to_port                      = 2049
+  ip_protocol                  = "tcp"
+  description                  = "Allow workers to reach NFS server on control plane"
 }
 
 resource "aws_key_pair" "cp_key_pair" {

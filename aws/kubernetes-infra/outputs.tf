@@ -10,7 +10,7 @@ output "control_plane_private_ip" {
 
 output "control_plane_ssh_target" {
   description = "SSH target for the Kubernetes control-plane node."
-  value       = "ec2-user@${aws_instance.cp_instance.public_ip}"
+  value       = "ubuntu@${aws_instance.cp_instance.public_ip}"
 }
 
 output "worker_private_ips" {
@@ -24,7 +24,7 @@ output "worker_private_ips" {
 output "worker_ssh_targets_via_control_plane" {
   description = "Worker SSH targets to use after connecting to the control plane."
   value = {
-    worker_node_1 = "ec2-user@${aws_instance.worker_instance_1.private_ip}"
-    worker_node_2 = "ec2-user@${aws_instance.worker_instance_2.private_ip}"
+    worker_node_1 = "ubuntu@${aws_instance.worker_instance_1.private_ip}"
+    worker_node_2 = "ubuntu@${aws_instance.worker_instance_2.private_ip}"
   }
 }
